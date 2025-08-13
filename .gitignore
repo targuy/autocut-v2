@@ -133,3 +133,42 @@ cache/
 # OS
 .DS_Store
 Thumbs.db
+
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+.venv/
+venv/
+.env
+.env.*
+
+# Build/Dist
+build/
+dist/
+*.egg-info/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.cache/
+
+# VS Code / IDE
+.vscode/
+.idea/
+
+# Project data/output
+data/
+outputs/
+tmp/
+cache/
+
+# Large media (avoid committing big binaries; use LFS or keep empty fixture dir)
+tests/fixtures/sample_videos/*
