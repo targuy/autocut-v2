@@ -1,0 +1,16 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "AutoCut v2: Run Basic Tests",
+			"type": "shell",
+			"command": "/Users/benoitguibenoittard/python/autocut-v2/.venv/bin/python",
+			"args": [
+				"test_basic.py"
+			],
+			"group": "test",
+			"problemMatcher": [],
+			"isBackground": false
+		}
+	]
+}

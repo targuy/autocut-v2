@@ -1,0 +1,89 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "autocut-v2"
+version = "0.1.0"
+description = "Automated video editing and cutting tool"
+authors = [
+    {name = "Your Name", email = "your.email@example.com"}
+]
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+dependencies = [
+    "torch>=2.0.0",
+    "opencv-python>=4.5.0",
+    "numpy>=1.20.0",
+    "moviepy>=1.0.3",
+    "pillow>=8.0.0",
+    "click>=8.0.0",
+    "pyyaml>=6.0.0",
+    "ffmpeg-python>=0.2.0",
+    "pyscenedetect>=0.6.0",
+    "ultralytics>=8.0.0",
+    "transformers>=4.20.0",
+    "huggingface-hub>=0.15.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "black>=23.0",
+    "flake8>=6.0",
+    "mypy>=1.0",
+]
+monitoring = [
+    "rich>=13.0.0",
+    "psutil>=5.9.0",
+]
+web = [
+    "fastapi>=0.100.0",
+    "uvicorn>=0.22.0",
+]
+pose = [
+    "mediapipe>=0.10.0",
+]
+nsfw = [
+    "nsfw-detector>=1.0.0",
+    "opennsfw2>=0.14.0",
+]
+all = [
+    "autocut-v2[dev,monitoring,web,pose,nsfw]",
+]
+
+[project.scripts]
+autocut = "autocut_v2.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.black]
+line-length = 88
+target-version = ['py38']
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]

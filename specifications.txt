@@ -1,0 +1,530 @@
+# AutoCutVideo - Spécifications Fonctionnelles
+# Version: 2.0
+# Date: 13 août 2025
+# Révision: Intégration retours utilisateur avec workflow adaptatif
+
+================================================================================
+OBJECTIF GÉNÉRAL
+================================================================================
+
+AutoCutVideo est un système modulaire Python pour le traitement intelligent de vidéos avec :
+- **Analyse multi-critères** : NSFW, genre, visibilité visage, pose, contenu
+- **Découpe automatique** : segments validés selon critères stricts
+- **Enrichissement sémantique** : métadonnées JSON via LLM
+- **Pipeline adaptatif** : optimisation automatique selon contenu et matériel
+
+**Plateformes cibles** : Windows 11 CUDA prioritaire, macOS Apple Silicon, CPU fallback
+**Environnement** : Conda préféré, venv sur macOS si contrainte
+
+================================================================================
+WORKFLOW INTELLIGENT ADAPTATIF
+================================================================================
+
+PRINCIPE D'OPTIMISATION
+------------------------
+Le système détermine automatiquement l'ordre optimal des étapes selon :
+- Coût temporel de la normalisation vs analyse
+- Probabilité de rejet (historique ou heuristique)
+- Résolution source vs cible
+- Ressources disponibles
+
+ÉTAPES MODULAIRES
+-----------------
+
+1. PRÉ-ANALYSE (Optionnelle, automatique)
+   Objectif: Décision intelligente normalisation
+   - Vérifier format source (résolution, fps)
+   - Estimer temps normalisation vs temps analyse
+   - Si format OK ou normalisation > 2x analyse → SKIP normalisation
+   - Si forte probabilité rejet → analyse d'abord
+
+2. NORMALISATION (Conditionnelle)
+   Conditions: format ≠ cible ET worth_it
+   - Scale + letterbox → 1280x720@24fps (configurable)
+   - Codec matériel prioritaire (NVENC > VideoToolbox > CPU)
+   - Skip si format déjà conforme
+   - Sortie: vidéo normalisée ou originale
+
+3. DÉTECTION SCÈNES (Recommandée)
+   Objectif: Cohérence échantillonnage LLM
+   - Méthode: ffmpeg scene ou PySceneDetect
+   - Seuil configurable (défaut: 0.3)
+   - Évite mélange scènes dans même échantillon
+   - Sortie: List[Scene{start, end, confidence}]
+   - Génération timeline: {video}_scenes.jpg
+
+4. ANALYSE MULTI-CRITÈRES
+   Process:
+   a. Échantillonnage intelligent par scène
+   b. Détection visages → tri par taille décroissante
+   c. Pour chaque visage significatif:
+      - Genre (si match filter → keep)
+      - Visibilité (% non masqué)
+      - Pose (angles tête)
+   d. NSFW global frame
+   e. Décision: ALL critères OK ou dans tolérance gap
+
+5. DÉCOUPE & ENRICHISSEMENT
+   - Stream-copy segments validés
+   - Pour chaque clip:
+     * Extraction N frames (uniforme dans scène)
+     * LLM → JSON par frame
+     * Vote/agrégation → sidecar.json
+     * Thumbnail: frame score max proche milieu
+
+6. POST-PRODUCTION
+   - Assemblage filtré par JSON
+   - Timeline finale: {prefix}_edited_joined.jpg
+   - Export métriques performance
+
+================================================================================
+ARCHITECTURE PLUGIN
+================================================================================
+
+INTERFACE COMMUNE
+-----------------
+```python
+class CriterionPlugin(ABC):
+    """Interface commune pour tous les critères"""
+    @abstractmethod
+    def check(self, frame_data: FrameData) -> CriterionResult
+    
+    @abstractmethod
+    def get_fallback_methods(self) -> List[str]
+```
+
+SYSTÈME FALLBACK
+----------------
+Chaque critère dispose de plusieurs implémentations avec ordre de préférence :
+- Tentative méthode primaire (haute précision)
+- Fallback sur méthodes secondaires si échec
+- Logging précision utilisée
+- Alerte si dégradation significative
+
+================================================================================
+CRITÈRES D'ANALYSE DÉTAILLÉS
+================================================================================
+
+1. NSFW DETECTION
+-----------------
+Implementations disponibles:
+  - nsfw_image_detector (défaut)
+  - transformers/nsfw-classifier
+  - opennsfw2
+  
+Fallback: nsfw_image_detector → transformers → opennsfw2
+
+Config:
+  nsfw.method: auto|specific_name
+  nsfw.mode: high|medium|low
+  nsfw.action: reject|keep
+
+2. DÉTECTION VISAGES
+--------------------
+Implementations:
+  - ultralytics/yolov8-face (défaut)
+  - huggingface/face-detection
+  - mediapipe/face_detection
+  - opencv/haar_cascade
+  
+Fallback ordre précision: yolo → hf → mediapipe → opencv
+
+Config:
+  face.method: auto|specific_name
+  face.min_confidence: 0.6
+  face.min_area_pct: 1.0
+  
+Multi-visages:
+  - Tri par aire décroissante
+  - Test critères sur chaque
+  - Keep si ≥1 match tous critères
+
+3. GENRE
+--------
+Implementations:
+  - huggingface/gender-classification (défaut)
+  - deepface/gender
+  - custom_model_path
+  
+Config:
+  gender.method: auto|specific_name
+  gender.filter: female|male|any
+  gender.min_confidence: 0.8
+  
+Logique inclusive:
+  - female → au moins 1 femme présente
+  - male → au moins 1 homme présent
+  - any → au moins 1 personne
+
+4. VISIBILITÉ & POSE
+--------------------
+Visibilité:
+  - Détection masque/occlusion
+  - max_face_mask_percentage: 50
+  
+Pose:
+  - Méthodes: mediapipe → opencv → heuristic
+  - Angles: pitch, yaw, roll
+  - Seuils par axe en degrés
+
+5. LOGIQUE DE DÉCISION
+----------------------
+Pour chaque frame:
+1. ALL critères doivent être OK
+2. OU être dans tolérance gap (max_gap secondes)
+3. Tracking léger si pas trop coûteux
+4. Multi-personnes: ≥1 personne valide = frame OK
+
+================================================================================
+GESTION LLM & MÉTADONNÉES
+================================================================================
+
+CONFIGURATION FLEXIBLE
+----------------------
+```yaml
+describe:
+  enabled: true
+  prompt_path: prompts/default.txt  # Personnalisable
+  schema_path: schemas/output.json  # Format attendu
+  model: nom_modele
+  endpoint: http://localhost:1234
+  frames_per_clip: 3-6  # Adaptatif selon durée
+  max_retries: 3
+  fallback_on_error: skip|stop|default_json
+```
+
+VALIDATION JSON TOLÉRANTE
+-------------------------
+Stratégie validation:
+1. Parse strict → OK
+2. Parse avec corrections communes (quotes, trailing comma)
+3. Extraction partielle champs valides
+4. Si >50% champs OK → vote partiel
+5. Sinon → log warning + action selon config
+
+Si JSON invalide après tentatives:
+- Essayer d'interpréter les champs valides pour vote
+- Si impossible: avertir et passer à vidéo suivante ou quitter
+
+THUMBNAIL INTELLIGENT
+--------------------
+```python
+def select_thumbnail(frames_scores: List[FrameScore]) -> Frame:
+    """Score max + proche du milieu temporel"""
+    mid_time = total_duration / 2
+    return min(frames_scores, 
+               key=lambda f: (1/f.score) * abs(f.time - mid_time))
+```
+
+MÉTADONNÉES MP4
+---------------
+Format compatible FFmpeg/VLC/DaVinci Resolve:
+```bash
+ffmpeg -i clip.mp4 -metadata comment="$(cat clip.json)" \
+       -metadata thumbnail="@thumbnail.jpg" \
+       -codec copy clip_meta.mp4
+```
+
+================================================================================
+CONFIGURATION (config.yml) ÉTENDUE
+================================================================================
+
+```yaml
+# Entrées/Sorties
+input_video: str                    # Fichier ou dossier
+output_dir: str                     # Dossier de sortie
+
+# Exécution
+device: auto|cuda:0|mps|cpu        # Détection auto si 'auto'
+num_workers: int                    # Threads analyse parallèle
+
+# Workflow adaptatif
+workflow:
+  auto_optimize: true               # Optimisation automatique ordre
+  skip_normalize_if_conform: true   # Skip si format OK
+  force_normalize: false            # Forcer normalisation
+
+# Normalisation
+normalize:
+  enabled: true
+  target_width: 1280
+  target_height: 720
+  target_fps: 24
+  codec: auto|h264_nvenc|h264_videotoolbox|libx264
+
+# Détection scènes
+scenes:
+  enabled: true
+  method: ffmpeg|pyscenedetect
+  threshold: 0.3
+  generate_timeline: true
+
+# Échantillonnage & Segments
+sample_rate: float                  # FPS échantillonnage (ex: 0.1)
+refine_rate: float                  # FPS affinage (réservé)
+min_clip_duration: float            # Durée min clip (secondes)
+max_gap: float                      # Tolérance trous (secondes)
+
+# Critères avec méthodes multiples
+criteria:
+  nsfw:
+    method: auto                    # auto sélectionne le meilleur disponible
+    fallback_chain: [nsfw_image_detector, transformers, opennsfw2]
+    mode: high
+    action: reject
+    
+  face:
+    method: auto
+    fallback_chain: [ultralytics, huggingface, mediapipe, opencv]
+    min_confidence: 0.6
+    min_area_pct: 1.0
+    
+  gender:
+    method: auto
+    fallback_chain: [transformers, deepface]
+    filter: female
+    min_confidence: 0.8
+    
+  pose:
+    enabled: true
+    max_pitch: 35
+    max_yaw: 75
+    max_roll: 35
+
+# Description LLM
+describe:
+  enabled: true
+  prompt_path: prompts/default.txt
+  schema_path: schemas/output.json
+  model: nom_modele
+  endpoint: http://localhost:1234
+  frames_per_clip: 3-6
+  max_retries: 3
+  fallback_on_error: skip
+
+# Monitoring
+monitoring:
+  display: rich|simple|web
+  export_metrics: true
+  metrics_path: ./metrics/
+  alert_high_rejection: true
+  rejection_threshold: 0.8
+```
+
+================================================================================
+MONITORING & PERFORMANCE
+================================================================================
+
+AFFICHAGE TEMPS RÉEL
+--------------------
+```python
+class ProgressMonitor:
+    """Affichage graphique progression + ressources"""
+    
+    def display(self):
+        # Terminal: rich/tqdm avec barres multiples
+        # Web: WebSocket → dashboard temps réel
+        # Métriques affichées:
+        - FPS traitement
+        - GPU/CPU/RAM usage  
+        - Clips/heure estimé
+        - Taux rejet par critère
+        - Queue frames en attente
+```
+
+ALERTES INTELLIGENTES
+---------------------
+Si taux de rejet > 80%:
+- Analyse des raisons de rejet
+- Suggestion ajustement seuils
+- Affichage graphique des distributions
+
+EXPORT MÉTRIQUES
+----------------
+Format JSON avec stats complètes:
+- Durées (total/gardé/rejeté)
+- Rejets par critère
+- Performance (FPS, clips/h, usage ressources)
+- Suggestions optimisation
+
+================================================================================
+TIMELINE VISUELLE
+================================================================================
+
+GÉNÉRATION AUTOMATIQUE
+----------------------
+1. Timeline scènes ({video}_scenes.jpg):
+   - Après détection scènes
+   - Thumbnails proportionnels aux durées
+   - Timestamps et métadonnées
+
+2. Timeline assemblage ({prefix}_edited_joined.jpg):
+   - Après assemblage final
+   - Composition visuelle clips retenus
+   - Métadonnées JSON intégrées
+
+ALGORITHME
+----------
+```python
+class TimelineGenerator:
+    def generate(clips: List[Clip], output_path: str):
+        # Calcul largeur proportionnelle
+        # Extraction thumbnails
+        # Composition avec PIL/OpenCV
+        # Ajout texte/métadonnées
+        # Export JPEG haute qualité
+```
+
+================================================================================
+INTERFACES CLI ÉTENDUES
+================================================================================
+
+1. CLI PRINCIPALE UNIFIÉE
+-------------------------
+```bash
+python -m autocut VIDEO [OPTIONS]
+
+Options communes:
+  -c, --config PATH         # Config YAML
+  --profile NAME            # Profil prédéfini (safe_content, face_focus)
+  --device cuda|mps|cpu     # Override device
+  --monitor web|term|none   # Type affichage
+  --dry-run                 # Simulation sans découpe
+  
+Options workflow:
+  --skip-normalize          # Force skip normalisation
+  --force-normalize         # Force normalisation  
+  --skip-scenes             # Pas de détection scènes
+  --enable-title-rename     # Renommer par titre LLM
+```
+
+2. MODULES INDIVIDUELS
+----------------------
+```bash
+python -m autocut.normalize VIDEO --target 720p
+python -m autocut.scenes VIDEO --threshold 0.3
+python -m autocut.analyze VIDEO --config config.yml
+python -m autocut.describe CLIPS_DIR --prompt custom.txt
+python -m autocut.timeline VIDEO --type scenes|assembly
+python -m autocut.assemble SRC DEST --criteria key:value
+```
+
+3. TEST & DEBUG
+---------------
+```bash
+python -m autocut.test_frame IMG --config config.yml
+python -m autocut.benchmark VIDEO --metrics-only
+python -m autocut.validate_config config.yml
+```
+
+================================================================================
+GESTION ERREURS & ROBUSTESSE
+================================================================================
+
+STRATÉGIES FALLBACK
+-------------------
+```python
+fallback_chains = {
+    'face_detection': [
+        ('ultralytics', 0.95),  # (method, precision_score)
+        ('huggingface', 0.90),
+        ('mediapipe', 0.85),
+        ('opencv', 0.70)
+    ],
+    'gender': [
+        ('transformers', 0.92),
+        ('deepface', 0.88),
+        ('rule_based', 0.60)
+    ]
+}
+```
+
+GESTION ERREURS LLM
+-------------------
+- Retry avec backoff exponentiel
+- Validation JSON tolérante
+- Fallback sur valeurs par défaut
+- Log détaillé des erreurs
+
+================================================================================
+INSTALLATION & DÉPLOIEMENT
+================================================================================
+
+ENVIRONNEMENTS
+--------------
+```bash
+# Conda (recommandé)
+conda env create -f environment.yml
+conda activate autocut
+
+# Venv (fallback macOS)
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# Docker (isolation complète)
+docker build -t autocut .
+docker run -v /data:/data autocut VIDEO
+```
+
+DÉPENDANCES INTELLIGENTES
+-------------------------
+```python
+# requirements.txt avec extras optionnels
+torch>=2.0  # [cuda11,cuda12,mps,cpu]
+ultralytics[export]
+transformers[torch]
+mediapipe  # optional: pour pose
+rich  # optional: pour monitoring avancé
+fastapi  # optional: pour interface web
+```
+
+================================================================================
+TESTS & VALIDATION
+================================================================================
+
+STRUCTURE TESTS
+---------------
+```
+tests/
+  unit/
+    test_criteria.py      # Chaque critère isolé
+    test_fallbacks.py     # Chaînes fallback
+    test_json_parsing.py  # Validation tolérante
+  integration/
+    test_pipeline.py      # Workflow complet
+    test_performance.py   # Benchmarks
+  fixtures/
+    sample_videos/        # Vidéos test
+    expected_outputs/     # Résultats référence
+```
+
+VALIDATION CONTINUE
+-------------------
+- Tests unitaires >80% coverage
+- Tests intégration workflow complet
+- Benchmarks performance
+- Validation configs YAML
+
+================================================================================
+NOTES TECHNIQUES
+================================================================================
+
+OPTIMISATIONS PRIORITAIRES
+--------------------------
+1. Early-exit sur critères non respectés
+2. Batch processing GPU (min 8 frames)
+3. Cache modèles entre vidéos
+4. Décodage séquentiel sans seeks
+5. Downscale analyse si pas de normalisation
+
+CONTRAINTES SPÉCIFIQUES
+-----------------------
+- macOS: venv obligatoire (pas conda)
+- Windows: privilégier CUDA
+- Formats vidéo: MP4/MOV/AVI/MKV
+- Codecs: H264/H265/ProRes
+- RAM min: 8GB, recommandé: 16GB
+- VRAM min: 4GB, recommandé: 8GB
+
+================================================================================

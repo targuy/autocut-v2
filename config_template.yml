@@ -1,0 +1,151 @@
+# AutoCut v2 Configuration Template
+# Based on specifications from specifications.txt
+
+# Input/Output Settings
+input_video: "input.mp4"                    # File or directory path
+output_dir: "./output"                      # Output directory
+
+# Execution Settings
+device: "auto"                              # auto|cuda:0|mps|cpu - Auto-detection if 'auto'
+num_workers: 4                              # Threads for parallel analysis
+
+# Workflow Adaptive Settings
+workflow:
+  auto_optimize: true                       # Enable automatic optimization of step order
+  skip_normalize_if_conform: true           # Skip normalization if format already matches target
+  force_normalize: false                    # Force normalization regardless of format
+
+# Normalization Settings
+normalize:
+  enabled: true
+  target_width: 1280
+  target_height: 720
+  target_fps: 24
+  codec: "auto"                            # auto|h264_nvenc|h264_videotoolbox|libx264
+
+# Scene Detection Settings
+scenes:
+  enabled: true
+  method: "ffmpeg"                         # ffmpeg|pyscenedetect
+  threshold: 0.3                           # Scene change threshold
+  generate_timeline: true                   # Generate visual timeline
+
+# Sampling & Segmentation
+sample_rate: 0.1                           # FPS for frame sampling (e.g., 0.1 = 1 frame per 10 seconds)
+refine_rate: 0.5                           # FPS for refinement (reserved for future use)
+min_clip_duration: 5.0                     # Minimum clip duration in seconds
+max_gap: 3.0                              # Maximum gap tolerance in seconds
+
+# Analysis Criteria with Fallback Methods
+criteria:
+  nsfw:
+    enabled: true
+    method: "auto"                         # auto selects best available method
+    fallback_chain: 
+      - "nsfw_image_detector"
+      - "transformers"
+      - "opennsfw2"
+    mode: "high"                          # high|medium|low precision
+    action: "reject"                      # reject|keep
+
+  face:
+    enabled: true
+    method: "auto"
+    fallback_chain:
+      - "ultralytics"
+      - "huggingface"
+      - "mediapipe"
+      - "opencv"
+    min_confidence: 0.6                   # Minimum face detection confidence
+    min_area_pct: 1.0                     # Minimum face area percentage
+
+  gender:
+    enabled: true
+    method: "auto"
+    fallback_chain:
+      - "transformers"
+      - "deepface"
+    filter: "female"                      # female|male|any
+    min_confidence: 0.8                   # Minimum gender classification confidence
+
+  pose:
+    enabled: true
+    method: "auto"
+    fallback_chain:
+      - "mediapipe"
+      - "opencv"
+      - "heuristic"
+    max_pitch: 35                         # Maximum head pitch angle in degrees
+    max_yaw: 75                          # Maximum head yaw angle in degrees
+    max_roll: 35                         # Maximum head roll angle in degrees
+
+  visibility:
+    enabled: true
+    max_face_mask_percentage: 50          # Maximum percentage of face that can be masked/occluded
+
+# LLM Description Settings
+describe:
+  enabled: true
+  prompt_path: "prompts/default.txt"       # Path to custom prompt file
+  schema_path: "schemas/output.json"       # Expected JSON output schema
+  model: "llama3"                         # Model name for LLM
+  endpoint: "http://localhost:1234"        # LLM endpoint URL
+  frames_per_clip: 5                      # Number of frames to analyze per clip (3-6 adaptive)
+  max_retries: 3                          # Maximum retry attempts for LLM calls
+  fallback_on_error: "skip"              # skip|stop|default_json
+  enable_title_rename: false              # Rename clips using LLM-generated titles
+
+# Monitoring & Performance
+monitoring:
+  display: "rich"                         # rich|simple|web|none
+  export_metrics: true                    # Export performance metrics
+  metrics_path: "./metrics/"              # Path for metrics export
+  alert_high_rejection: true              # Alert if rejection rate is high
+  rejection_threshold: 0.8                # Threshold for high rejection alert
+
+# Video Processing Settings
+video:
+  temp_dir: "./temp"                      # Temporary files directory
+  cleanup_temp: true                      # Clean up temporary files after processing
+  parallel_processing: false             # Enable parallel video processing
+  max_workers: 4                         # Maximum worker threads for parallel processing
+
+# Quality & Output Settings
+output:
+  codec: "libx264"                       # Output video codec
+  audio_codec: "aac"                     # Output audio codec
+  quality: "medium"                      # low|medium|high|lossless
+  container: "mp4"                       # Output container format
+  preserve_metadata: true                # Preserve original video metadata
+  embed_thumbnails: true                 # Embed thumbnails in output videos
+
+# Timeline Generation
+timeline:
+  generate_scenes: true                  # Generate scene timeline
+  generate_final: true                   # Generate final assembly timeline
+  image_quality: 90                      # JPEG quality for timeline images
+  max_width: 1920                       # Maximum timeline image width
+  show_metadata: true                    # Include metadata in timeline
+
+# Logging Settings
+logging:
+  level: "INFO"                          # DEBUG|INFO|WARNING|ERROR
+  file: "autocut.log"                    # Log file path (null for console only)
+  format: "detailed"                     # simple|detailed|json
+  max_file_size: "10MB"                  # Maximum log file size before rotation
+  backup_count: 5                       # Number of backup log files to keep
+
+# Error Handling
+error_handling:
+  continue_on_error: true                # Continue processing other videos if one fails
+  retry_failed: false                    # Retry failed videos
+  save_error_clips: false               # Save clips that caused errors for debugging
+  detailed_error_logs: true             # Include detailed error information in logs
+
+# Advanced Settings
+advanced:
+  memory_limit: "8GB"                    # Maximum memory usage limit
+  gpu_memory_fraction: 0.8               # Fraction of GPU memory to use
+  enable_preprocessing_cache: true       # Cache preprocessing results
+  cache_dir: "./cache"                   # Cache directory
+  max_cache_size: "2GB"                 # Maximum cache size

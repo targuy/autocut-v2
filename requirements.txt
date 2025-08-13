@@ -1,0 +1,34 @@
+# Core dependencies
+torch>=2.0.0
+opencv-python>=4.5.0
+numpy>=1.20.0
+moviepy>=1.0.3
+pillow>=8.0.0
+click>=8.0.0
+pyyaml>=6.0.0
+
+# Video processing
+ffmpeg-python>=0.2.0
+pyscenedetect>=0.6.0
+
+# AI/ML libraries
+ultralytics>=8.0.0
+transformers>=4.20.0
+huggingface-hub>=0.15.0
+
+# Optional dependencies
+mediapipe>=0.10.0  # For pose detection
+rich>=13.0.0       # For advanced monitoring
+fastapi>=0.100.0   # For web interface
+uvicorn>=0.22.0    # For web server
+
+# NSFW detection (optional)
+# nsfw-detector>=1.0.0
+# opennsfw2>=0.14.0
+
+# Development dependencies
+pytest>=7.0.0
+pytest-cov>=4.0.0
+black>=23.0.0
+flake8>=6.0.0
+mypy>=1.0.0
