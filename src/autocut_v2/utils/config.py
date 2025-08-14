@@ -11,6 +11,97 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def get_device_for_ml(config_device: str = "auto") -> str:
+    """
+    Determine the best device for ML models based on config and availability.
+    
+    Args:
+        config_device: Device setting from config ("auto", "cuda", "cuda:0", "mps", "cpu")
+        
+    Returns:
+        Device string for transformers/pytorch ("cuda", "cpu", etc.)
+    """
+    logger.info(f"get_device_for_ml called with config_device: {config_device}")
+    
+    if config_device == "auto":
+        try:
+            import torch
+            logger.info(f"PyTorch version: {torch.__version__}")
+            cuda_available = torch.cuda.is_available()
+            logger.info(f"CUDA available: {cuda_available}")
+            if cuda_available:
+                device_count = torch.cuda.device_count()
+                current_device = torch.cuda.current_device()
+                logger.info(f"CUDA device count: {device_count}")
+                logger.info(f"Current CUDA device: {current_device}")
+                return "cuda"
+            elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+                logger.info("Using MPS (Apple Silicon)")
+                return "mps"
+            else:
+                logger.info("Falling back to CPU")
+                return "cpu"
+        except ImportError as e:
+            logger.warning(f"PyTorch not available: {e}")
+            return "cpu"
+    elif config_device.startswith("cuda"):
+        try:
+            import torch
+            cuda_available = torch.cuda.is_available()
+            logger.info(f"CUDA explicitly requested, torch.cuda.is_available(): {cuda_available}")
+            
+            # WORKAROUND: If CUDA is explicitly requested and we have GPU devices, force CUDA usage
+            # This bypasses any context-specific issues with torch.cuda.is_available()
+            if cuda_available:
+                logger.info(f"CUDA confirmed available, returning: {config_device}")
+                return config_device
+            else:
+                # Check if we can detect CUDA devices through nvidia-smi or device count
+                try:
+                    device_count = torch.cuda.device_count()
+                    logger.warning(f"CUDA device count: {device_count}")
+                    if device_count > 0:
+                        logger.info(f"CUDA devices detected ({device_count}), forcing CUDA despite torch.cuda.is_available()=False")
+                        return config_device
+                except Exception as e:
+                    logger.warning(f"Error getting CUDA device count: {e}")
+                
+                logger.warning(f"CUDA requested but torch.cuda.is_available() returned False, falling back to CPU")
+                return "cpu"
+        except ImportError:
+            logger.warning(f"CUDA requested but PyTorch not available, falling back to CPU")
+            return "cpu"
+    else:
+        logger.info(f"Using specified device: {config_device}")
+        return config_device
+
+
+def get_device_id_for_transformers(device: str) -> int:
+    """
+    Convert device string to device ID for Transformers pipeline.
+    
+    Args:
+        device: Device string ("cuda", "cpu", "mps", "cuda:0", etc.)
+        
+    Returns:
+        Device ID for transformers pipeline (-1 for CPU, 0+ for GPU)
+    """
+    if device == "cpu":
+        return -1
+    elif device.startswith("cuda"):
+        if ":" in device:
+            try:
+                return int(device.split(":")[1])
+            except (ValueError, IndexError):
+                return 0
+        else:
+            return 0
+    elif device == "mps":
+        return 0  # MPS uses device 0
+    else:
+        return -1  # Default to CPU for unknown devices
+
+
 class Config:
     """
     Manages configuration settings for video processing.

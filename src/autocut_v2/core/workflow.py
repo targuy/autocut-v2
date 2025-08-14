@@ -5,6 +5,8 @@ Intelligent adaptive workflow for video processing.
 from typing import Dict, Any, List, Optional, Tuple
 import logging
 import time
+import subprocess
+import json
 from pathlib import Path
 from dataclasses import dataclass
 from enum import Enum
@@ -83,32 +85,131 @@ class WorkflowOptimizer:
             VideoProfile with video characteristics
         """
         try:
-            # In real implementation, use ffprobe or moviepy to get video info
-            # For now, return mock profile
-            file_size = Path(video_path).stat().st_size
+            # Get video information using ffprobe
+            probe_cmd = [
+                'ffprobe', '-v', 'quiet', '-print_format', 'json',
+                '-show_format', '-show_streams', video_path
+            ]
+            
+            try:
+                result = subprocess.run(
+                    probe_cmd, capture_output=True, text=True, check=True
+                )
+                probe_data = json.loads(result.stdout)
+            except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
+                logger.error(f"ffprobe failed: {e}")
+                # Fallback to file size analysis
+                file_size = Path(video_path).stat().st_size
+                return self._create_fallback_profile(file_size)
+            
+            # Extract video stream information
+            video_stream = None
+            for stream in probe_data.get('streams', []):
+                if stream.get('codec_type') == 'video':
+                    video_stream = stream
+                    break
+            
+            if not video_stream:
+                logger.warning("No video stream found")
+                file_size = Path(video_path).stat().st_size
+                return self._create_fallback_profile(file_size)
+            
+            # Extract video properties
+            width = int(video_stream.get('width', 1280))
+            height = int(video_stream.get('height', 720))
+            
+            # Parse frame rate
+            fps_str = video_stream.get('r_frame_rate', '24/1')
+            try:
+                if '/' in fps_str:
+                    num, den = fps_str.split('/')
+                    fps = float(num) / float(den)
+                else:
+                    fps = float(fps_str)
+            except (ValueError, ZeroDivisionError):
+                fps = 24.0
+            
+            # Get duration
+            duration = float(probe_data.get('format', {}).get('duration', 60.0))
+            
+            # Get format and codec
+            format_name = probe_data.get('format', {}).get('format_name', 'unknown')
+            codec = video_stream.get('codec_name', 'unknown')
+            
+            # Get file size
+            file_size = int(probe_data.get('format', {}).get('size', 0))
+            if file_size == 0:
+                file_size = Path(video_path).stat().st_size
+            
+            # Estimate complexity based on resolution, fps, and bitrate
+            complexity = self._estimate_complexity(width, height, fps, file_size, duration)
             
             return VideoProfile(
-                resolution=(1920, 1080),  # Mock values
-                fps=30.0,
-                duration=300.0,  # 5 minutes
-                format="mp4",
-                codec="h264",
+                resolution=(width, height),
+                fps=fps,
+                duration=duration,
+                format=format_name,
+                codec=codec,
                 file_size=file_size,
-                estimated_complexity=0.7  # 0.0 = simple, 1.0 = complex
+                estimated_complexity=complexity
             )
             
         except Exception as e:
             logger.error(f"Error analyzing video profile: {str(e)}")
             # Return safe defaults
-            return VideoProfile(
-                resolution=(1280, 720),
-                fps=24.0,
-                duration=60.0,
-                format="unknown",
-                codec="unknown",
-                file_size=0,
-                estimated_complexity=0.5
+            try:
+                file_size = Path(video_path).stat().st_size
+            except:
+                file_size = 0
+            return self._create_fallback_profile(file_size)
+    
+    def _create_fallback_profile(self, file_size: int) -> VideoProfile:
+        """Create a fallback video profile when analysis fails."""
+        return VideoProfile(
+            resolution=(1280, 720),
+            fps=24.0,
+            duration=60.0,
+            format="unknown",
+            codec="unknown",
+            file_size=file_size,
+            estimated_complexity=0.5
+        )
+    
+    def _estimate_complexity(self, width: int, height: int, fps: float, 
+                           file_size: int, duration: float) -> float:
+        """
+        Estimate video complexity for processing optimization.
+        
+        Returns:
+            Float between 0.0 (simple) and 1.0 (complex)
+        """
+        try:
+            # Base complexity on resolution
+            pixels = width * height
+            resolution_complexity = min(pixels / (1920 * 1080), 1.0)
+            
+            # Factor in frame rate
+            fps_complexity = min(fps / 60.0, 1.0)
+            
+            # Factor in bitrate (file size / duration)
+            if duration > 0:
+                bitrate = (file_size * 8) / duration  # bits per second
+                # Assume 10 Mbps as high complexity threshold
+                bitrate_complexity = min(bitrate / 10_000_000, 1.0)
+            else:
+                bitrate_complexity = 0.5
+            
+            # Weighted average
+            complexity = (
+                resolution_complexity * 0.4 +
+                fps_complexity * 0.3 +
+                bitrate_complexity * 0.3
             )
+            
+            return max(0.1, min(complexity, 1.0))  # Clamp between 0.1 and 1.0
+            
+        except Exception:
+            return 0.5  # Safe default
     
     def should_normalize(self, profile: VideoProfile) -> Tuple[bool, str]:
         """

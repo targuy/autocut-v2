@@ -4,9 +4,10 @@ Scene detection module for identifying video segments.
 
 from typing import List, Tuple, Optional
 import logging
-# import cv2
-# import numpy as np
-# from moviepy.editor import VideoFileClip
+import subprocess
+import json
+import os
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -67,21 +68,92 @@ class SceneDetector:
         Returns:
             List of scene boundaries
         """
-        # For now, return mock scenes
-        # In real implementation, would use ffmpeg-python to run:
-        # ffmpeg -i input.mp4 -filter:v "select='gt(scene,0.3)',showinfo" -f null -
-        
-        logger.info("Using FFmpeg scene detection (mock implementation)")
-        
-        # Mock scene detection results
-        scenes = [
-            (0.0, 20.0),
-            (20.0, 45.0),
-            (45.0, 60.0)
-        ]
-        
-        logger.info(f"Detected {len(scenes)} scenes using FFmpeg method")
-        return scenes
+        try:
+            logger.info("Using FFmpeg scene detection")
+            
+            # First, get video duration
+            duration_cmd = [
+                'ffprobe', '-v', 'quiet', '-show_entries', 'format=duration',
+                '-of', 'csv=p=0', video_path
+            ]
+            
+            try:
+                duration_result = subprocess.run(
+                    duration_cmd, capture_output=True, text=True, check=True
+                )
+                duration = float(duration_result.stdout.strip())
+            except (subprocess.CalledProcessError, ValueError) as e:
+                logger.warning(f"Could not get video duration: {e}")
+                duration = 60.0  # Default fallback
+            
+            # Run FFmpeg scene detection
+            scene_cmd = [
+                'ffmpeg', '-i', video_path,
+                '-filter:v', f'select=gt(scene\\,{self.threshold}),showinfo',
+                '-f', 'null', '-'
+            ]
+            
+            try:
+                result = subprocess.run(
+                    scene_cmd, capture_output=True, text=True, check=False
+                )
+                
+                # Parse scene detection output from stderr
+                scene_times = []
+                lines = result.stderr.split('\n')
+                
+                for line in lines:
+                    if 'showinfo' in line and 'pts_time:' in line:
+                        try:
+                            # Extract timestamp from showinfo output
+                            pts_start = line.find('pts_time:') + 9
+                            pts_end = line.find(' ', pts_start)
+                            if pts_end == -1:
+                                pts_end = len(line)
+                            timestamp = float(line[pts_start:pts_end])
+                            scene_times.append(timestamp)
+                        except (ValueError, IndexError):
+                            continue
+                
+                # Convert scene times to scene boundaries
+                scenes = []
+                if scene_times:
+                    # Add start of video
+                    if scene_times[0] > 0:
+                        scenes.append((0.0, scene_times[0]))
+                    
+                    # Add scenes between detected boundaries
+                    for i in range(len(scene_times) - 1):
+                        scenes.append((scene_times[i], scene_times[i + 1]))
+                    
+                    # Add final scene to end of video
+                    if scene_times[-1] < duration:
+                        scenes.append((scene_times[-1], duration))
+                else:
+                    # No scene changes detected, return single scene
+                    scenes = [(0.0, duration)]
+                
+                # Filter out scenes shorter than minimum length
+                filtered_scenes = []
+                for start, end in scenes:
+                    if end - start >= self.min_scene_length:
+                        filtered_scenes.append((start, end))
+                
+                if not filtered_scenes:
+                    # If all scenes were too short, return single scene
+                    filtered_scenes = [(0.0, duration)]
+                
+                logger.info(f"Detected {len(filtered_scenes)} scenes using FFmpeg method")
+                return filtered_scenes
+                
+            except Exception as e:
+                logger.error(f"FFmpeg scene detection failed: {e}")
+                # Return single scene as fallback
+                return [(0.0, duration)]
+                
+        except Exception as e:
+            logger.error(f"Error in FFmpeg scene detection: {e}")
+            return [(0.0, 60.0)]  # Return fallback scene
     
     def _detect_scenes_pyscenedetect(self, video_path: str) -> List[Tuple[float, float]]:
         """
@@ -93,18 +165,53 @@ class SceneDetector:
         Returns:
             List of scene boundaries
         """
-        # For now, return mock scenes
-        # In real implementation, would use:
-        # from scenedetect import detect, ContentDetector
-        
-        logger.info("Using PySceneDetect (mock implementation)")
-        
-        # Mock scene detection results
-        scenes = [
-            (0.0, 15.0),
-            (15.0, 35.0),
-            (35.0, 60.0)
-        ]
-        
-        logger.info(f"Detected {len(scenes)} scenes using PySceneDetect method")
-        return scenes
+        try:
+            logger.info("Using PySceneDetect")
+            
+            # Try to import PySceneDetect
+            try:
+                from scenedetect import detect, ContentDetector
+            except ImportError:
+                logger.warning("PySceneDetect not available, falling back to FFmpeg")
+                return self._detect_scenes_ffmpeg(video_path)
+            
+            # Detect scenes using ContentDetector
+            scene_list = detect(video_path, ContentDetector(threshold=self.threshold))
+            
+            if not scene_list:
+                logger.warning("No scenes detected, returning single scene")
+                # Get video duration as fallback
+                try:
+                    duration_cmd = [
+                        'ffprobe', '-v', 'quiet', '-show_entries', 'format=duration',
+                        '-of', 'csv=p=0', video_path
+                    ]
+                    duration_result = subprocess.run(
+                        duration_cmd, capture_output=True, text=True, check=True
+                    )
+                    duration = float(duration_result.stdout.strip())
+                except:
+                    duration = 60.0
+                return [(0.0, duration)]
+            
+            # Convert scene list to our format
+            scenes = []
+            for i, scene in enumerate(scene_list):
+                start_time = scene[0].get_seconds()
+                end_time = scene[1].get_seconds()
+                
+                # Filter by minimum scene length
+                if end_time - start_time >= self.min_scene_length:
+                    scenes.append((start_time, end_time))
+            
+            if not scenes:
+                # All scenes were too short, return single scene
+                total_duration = scene_list[-1][1].get_seconds() if scene_list else 60.0
+                scenes = [(0.0, total_duration)]
+            
+            logger.info(f"Detected {len(scenes)} scenes using PySceneDetect method")
+            return scenes
+            
+        except Exception as e:
+            logger.error(f"PySceneDetect failed: {e}, falling back to FFmpeg")
+            return self._detect_scenes_ffmpeg(video_path)

@@ -1,0 +1,159 @@
+# AutoCut v2 Configuration Template
+# Based on specifications from specifications.txt
+
+# Input/Output Settings
+input_video: "T:/sd/video/norma/41681351 hls-720p_1_apo8_prob4.mov"
+output_dir: "T:/Davinci/timelines/out-v2"
+
+# Execution Settings
+device: "cuda"                              # auto|cuda:0|mps|cpu - Auto-detection if 'auto'
+num_workers: 4                              # Threads for parallel analysis
+
+# Workflow Adaptive Settings
+workflow:
+  auto_optimize: true                       # Enable automatic optimization of step order
+  skip_normalize_if_conform: true           # Skip normalization if format already matches target
+  force_normalize: false                    # Force normalization regardless of format
+
+# Normalization Settings
+normalize:
+  enabled: true
+  target_width: 1280
+  target_height: 720
+  target_fps: 24
+  codec: "auto"                            # auto|h264_nvenc|h264_videotoolbox|libx264
+
+# Scene Detection Settings
+scenes:
+  enabled: true
+  method: "ffmpeg"                         # ffmpeg|pyscenedetect
+  threshold: 0.3                           # Scene change threshold
+  generate_timeline: true                   # Generate visual timeline
+
+# Sampling & Segmentation
+sample_rate: 0.25                           # FPS for frame sampling
+refine_rate: 0.5                           # FPS for refinement
+min_clip_duration: 5.0                     # Minimum clip duration in seconds
+max_gap: 2.0                              # Maximum gap tolerance in seconds
+
+# Filtering Settings
+filtering:
+  criteria_threshold: 0.2                  # Percentage of criteria that must be met to keep a segment (20% = 1/5 criteria)
+  rejection_strategy: "any"                # percentage|count|any|all - "any" means keep if ANY criteria is met
+  min_criteria_count: 1                    # Minimum number of criteria that must be met (when strategy is 'count')
+  warn_high_rejection: true                # Warn if rejection rate exceeds warning threshold
+  rejection_warning_threshold: 0.8        # Threshold for high rejection warning
+
+# Analysis Criteria with Fallback Methods
+criteria:
+  nsfw:
+    enabled: true
+    method: "auto"                         # auto selects best available method
+    fallback_chain:
+      - "nsfw_image_detector"
+      - "transformers"
+      - "opennsfw2"
+    mode: "high"                          # high|medium|low precision
+    action: "reject"                      # reject|keep
+
+  face:
+    enabled: true
+    method: "auto"
+    fallback_chain:
+      - "ultralytics"
+      - "huggingface"
+      - "mediapipe"
+      - "opencv"
+    min_confidence: 0.6
+    min_area_pct: 1.0
+
+  gender:
+    enabled: true
+    method: "auto"
+    fallback_chain:
+      - "transformers"
+      - "deepface"
+    filter: "female"
+    min_confidence: 0.8
+
+  pose:
+    enabled: true
+    method: "auto"
+    fallback_chain:
+      - "mediapipe"
+      - "opencv"
+      - "heuristic"
+    max_pitch: 35
+    max_yaw: 75
+    max_roll: 35
+
+  visibility:
+    enabled: true
+    max_face_mask_percentage: 50
+
+# LLM Description Settings
+describe:
+  enabled: true
+  prompt_path: "prompts/default.txt"
+  schema_path: "schemas/output.json"
+  model: "mistral-community_pixtral-12b"
+  endpoint: "http://localhost:1234"
+  frames_per_clip: 5
+  max_retries: 3
+  fallback_on_error: "skip"
+  enable_title_rename: false
+
+# Monitoring & Performance
+monitoring:
+  display: "term"
+  export_metrics: true
+  metrics_path: "./metrics/"
+  alert_high_rejection: true
+  rejection_threshold: 0.8
+
+# Video Processing Settings
+video:
+  temp_dir: "./temp"
+  cleanup_temp: true
+  parallel_processing: false
+  max_workers: 4
+
+# Quality & Output Settings
+output:
+  codec: "libx264"
+  audio_codec: "aac"
+  quality: "medium"
+  container: "mp4"
+  preserve_metadata: true
+  embed_thumbnails: true
+
+# Timeline Generation
+timeline:
+  generate_scenes: true
+  generate_final: true
+  image_quality: 90
+  max_width: 1920
+  show_metadata: true
+
+# Logging Settings
+logging:
+  level: "DEBUG"
+  file: "autocut.log"
+  format: "detailed"
+  max_file_size: "10MB"
+  backup_count: 5
+
+# Error Handling
+error_handling:
+  continue_on_error: true
+  retry_failed: false
+  save_error_clips: false
+  detailed_error_logs: true
+
+# Advanced Settings
+advanced:
+  memory_limit: "8GB"
+  gpu_memory_fraction: 0.8
+  enable_preprocessing_cache: true
+  cache_dir: "./cache"
+  max_cache_size: "2GB"

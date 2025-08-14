@@ -36,6 +36,14 @@ refine_rate: 0.5                           # FPS for refinement (reserved for fu
 min_clip_duration: 5.0                     # Minimum clip duration in seconds
 max_gap: 3.0                              # Maximum gap tolerance in seconds
 
+# Filtering Settings
+filtering:
+  criteria_threshold: 0.6                  # Percentage of criteria that must be met to keep a segment (0.0-1.0)
+  rejection_strategy: "percentage"         # percentage|count|any|all
+  min_criteria_count: 1                    # Minimum number of criteria that must be met (when strategy is 'count')
+  warn_high_rejection: true                # Warn if rejection rate exceeds warning threshold
+  rejection_warning_threshold: 0.8        # Threshold for high rejection warning
+
 # Analysis Criteria with Fallback Methods
 criteria:
   nsfw:

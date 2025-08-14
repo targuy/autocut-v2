@@ -1,0 +1,34 @@
+I want an analysis of the picture joined. Give a general description of the sex scene, focusing on what the woman is doing, her body characteristics, and the precise sex position. Ignore men.
+Provide a JSON response according to the template below.
+You must fill all fields.
+Exactly one action must be set to 'yes' (the closest), all others must be 'no'
+Use exactly the same property names as in the template, including spaces and punctuation.
+Do not convert to snake_case or camelCase. Copy the property names as-is.
+Keep the integrity of the json model that can comply exactly with :
+{
+"description": {
+"general_description": "string",
+"Is it NSFW": "yes" or "no",
+"is there a woman": "yes" or "no",
+"actions": {
+"it is a blowjob when a penis is in mouth": "yes" or "no",
+"it is a titjob when a penis is between breasts": "yes" or "no",
+"it is doggystyle sex when a man is fucking a woman from behind": "yes" or "no",
+"it is missionary sex when the woman is laying down with a man on top of her": "yes" or "no",
+"it is cowgirl sex when a woman is sitting or squatting or laying on her belly on top of a man": "yes" or "no"
+},
+"face orientation": "side" | "front" | "three quarter" | "behind" | "top" | "below",
+"ethnicity": "caucasian" | "black" | "asian",
+"body type": "slim" | "average" | "fat",
+"age": "young under thirty years old" | "middle thirty or forty years old" | "old fifty years old and older",
+"hair color": "blond" | "redhead" | "brunette" | "black" | "grey",
+"hair length": "short" | "medium" | "long",
+"hair cut": "string",
+"breasts shape": "string",
+"breasts size": "small breasts like A cup" | "medium-size breasts like a B cup" | "big breasts like a C cup and bigger",
+"facial expression": "string",
+"outfit": "string"
+}
+}
+Never answer with the word 'string', always provide a real value
+Only one json answer.

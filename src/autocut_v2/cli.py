@@ -163,6 +163,58 @@ def main(
             
             if result['success']:
                 click.echo(f"✓ Successfully processed: {result['output_path']}")
+                
+                # Show Step 1 analysis results if available
+                if 'step1_analysis' in result:
+                    analysis = result['step1_analysis']
+                    click.echo(f"\n📊 Step 1 Analysis Results:")
+                    if 'file_info' in analysis:
+                        click.echo(f"  📁 File: {analysis['file_info']['size_mb']}MB")
+                    if 'video_info' in analysis and 'error' not in analysis['video_info']:
+                        video = analysis['video_info']
+                        click.echo(f"  🎬 Video: {video.get('width', '?')}x{video.get('height', '?')} @ {video.get('fps', 0):.1f}fps")
+                        click.echo(f"  ⏱️  Duration: {video.get('duration', 0):.1f}s")
+                        click.echo(f"  🎥 Codec: {video.get('codec', 'unknown')}")
+                
+                # Show Step 2 scene detection results if available
+                if 'step2_scenes' in result:
+                    scenes = result['step2_scenes']
+                    click.echo(f"\n🎬 Step 2 Scene Detection Results:")
+                    click.echo(f"  📈 Method: {scenes.get('method', 'unknown')}")
+                    scene_list = scenes.get('scenes', [])
+                    click.echo(f"  🎞️  Scenes: {len(scene_list)} detected")
+                    if scene_list and len(scene_list) <= 10:  # Show first 10 scenes
+                        for scene in scene_list[:5]:  # Show first 5 for brevity
+                            click.echo(f"    - Scene {scene['id']}: {scene['start_time']:.1f}s - {scene['end_time']:.1f}s ({scene['duration']:.1f}s)")
+                        if len(scene_list) > 5:
+                            click.echo(f"    ... and {len(scene_list) - 5} more scenes")
+                
+                # Show Step 3 content analysis results if available
+                if 'step3_content' in result:
+                    content = result['step3_content']
+                    click.echo(f"\n🔍 Step 3 Content Analysis Results:")
+                    click.echo(f"  📊 Scenes analyzed: {content.get('scenes_analyzed', 0)}")
+                    click.echo(f"  ✅ Scenes kept: {content.get('scenes_kept', 0)}")
+                    click.echo(f"  ❌ Scenes rejected: {content.get('scenes_rejected', 0)}")
+                    click.echo(f"  📉 Rejection rate: {content.get('rejection_rate', 0):.1%}")
+                    click.echo(f"  ⏱️  Duration kept: {content.get('duration_kept', 0):.1f}s / {content.get('duration_original', 0):.1f}s")
+                    click.echo(f"  🖼️  Frames extracted: {content.get('frames_extracted', 0)}")
+                    
+                    # Show sample rate used
+                    processing_info = content.get('processing_info', {})
+                    sample_rate = processing_info.get('sample_rate_used', 'unknown')
+                    click.echo(f"  📈 Sample rate: {sample_rate} fps")
+                    
+                    # Show criteria applied
+                    criteria = content.get('criteria_applied', [])
+                    if criteria:
+                        click.echo(f"  📋 Criteria: {', '.join(criteria)}")
+                
+                # Show temp files info
+                if 'temp_dir' in result:
+                    click.echo(f"\n🗂️  Temp files: {result['temp_dir']}")
+                if 'current_step' in result:
+                    click.echo(f"📈 Progress: Step {result['current_step']}/{result['total_steps']}")
             else:
                 click.echo(f"✗ Failed to process: {video_file} - {result.get('error', 'Unknown error')}", err=True)
         
