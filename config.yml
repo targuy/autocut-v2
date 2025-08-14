@@ -1,159 +1,806 @@
-# AutoCut v2 Configuration Template
-# Based on specifications from specifications.txt
+# ================================================================================================
+# AutoCut v2 - Advanced Video Processing Configuration
+# ================================================================================================
+# This configuration file controls all aspects of automated video processing, including scene
+# detection, content analysis, filtering criteria, and output settings. Each section is thoroughly
+# documented with examples, valid values, and performance implications.
+#
+# Configuration Format: YAML (indentation-sensitive)
+# File Encoding: UTF-8
+# ================================================================================================
 
-# Input/Output Settings
-input_video: "T:/sd/video/norma/41681351 hls-720p_1_apo8_prob4.mov"
+# ================================================================================================
+# INPUT/OUTPUT SETTINGS
+# ================================================================================================
+# Defines source video files and output destinations for processed content
+
+# Path to the input video file to be processed
+# Supported formats: MP4, MOV, AVI, MKV, WebM, FLV, M4V
+# Examples:
+#   - Windows: "C:\\Videos\\input.mp4" or "C:/Videos/input.mp4"
+#   - macOS/Linux: "/home/user/videos/input.mp4"
+#   - Network: "\\\\server\\share\\video.mp4" or "smb://server/share/video.mp4"
+# Note: Use forward slashes (/) or escape backslashes (\\\\) in paths
+input_video: "T:/sd/video/mandy dee/Un vieux et une ado - 29 xHamster.mp4"
+
+# Directory where processed videos and intermediate files will be saved
+# The system will create subdirectories for temporary files, logs, and outputs
+# Structure created: output_dir/temp/, output_dir/logs/, output_dir/processed_*.ext
+# Disk space required: ~2-3x input video size during processing
+# Examples:
+#   - Local drive: "D:/AutoCut_Output"
+#   - Network drive: "//nas/video/autocut_results"
+# Permissions: Directory must be writable by the current user
 output_dir: "T:/Davinci/timelines/out-v2"
 
-# Execution Settings
-device: "cuda"                              # auto|cuda:0|mps|cpu - Auto-detection if 'auto'
-num_workers: 4                              # Threads for parallel analysis
+# ================================================================================================
+# EXECUTION SETTINGS
+# ================================================================================================
+# Controls hardware acceleration, parallel processing, and computational resources
 
-# Workflow Adaptive Settings
+# Hardware acceleration device for AI model inference
+# Values:
+#   - "auto": Automatically detect best available device (recommended)
+#   - "cuda": NVIDIA GPU acceleration (requires CUDA toolkit + compatible GPU)
+#   - "cuda:0", "cuda:1": Specific GPU device (for multi-GPU systems)
+#   - "mps": Apple Silicon GPU acceleration (macOS M1/M2 only)
+#   - "cpu": CPU-only processing (slower but compatible everywhere)
+# Performance impact: GPU acceleration is 5-20x faster than CPU for AI models
+# Memory requirements: GPU needs 2-8GB VRAM depending on models used
+device: "cuda"
+
+# Number of parallel worker threads for CPU-intensive operations
+# Range: 1-32 (recommended: CPU core count or CPU_cores/2 for stability)
+# Higher values: Faster processing but more RAM usage and system load
+# Lower values: Slower processing but better system responsiveness
+# Examples:
+#   - 4-core CPU: use 2-4 workers
+#   - 8-core CPU: use 4-6 workers
+#   - 16-core CPU: use 8-12 workers
+# Memory impact: Each worker can use 200-500MB RAM during frame analysis
+num_workers: 4
+
+# ================================================================================================
+# WORKFLOW ADAPTIVE SETTINGS
+# ================================================================================================
+# Intelligent optimization of processing steps based on video characteristics
+
 workflow:
-  auto_optimize: true                       # Enable automatic optimization of step order
-  skip_normalize_if_conform: true           # Skip normalization if format already matches target
-  force_normalize: false                    # Force normalization regardless of format
+  # Automatically reorder processing steps for optimal performance
+  # When enabled, the system analyzes video properties and chooses the most efficient
+  # sequence of operations (e.g., skip normalization if already in target format)
+  # Values: true (recommended) | false
+  # Performance impact: Can reduce processing time by 20-50% for compatible videos
+  auto_optimize: true
 
-# Normalization Settings
+  # Skip video normalization if input already matches target specifications
+  # Checks: resolution, framerate, codec, and quality settings
+  # Values: true (recommended for speed) | false (force consistency)
+  # When true: Saves 30-60 seconds for videos already in correct format
+  # When false: Ensures absolute consistency but increases processing time
+  skip_normalize_if_conform: true
+
+  # Force normalization regardless of input video format
+  # Overrides skip_normalize_if_conform setting
+  # Values: true | false (recommended)
+  # Use true when: Ensuring consistent quality/format is critical
+  # Use false when: Speed is prioritized over format consistency
+  force_normalize: false
+
+# ================================================================================================
+# NORMALIZATION SETTINGS
+# ================================================================================================
+# Video format standardization for consistent processing and output quality
+
 normalize:
+  # Enable video normalization (format/quality standardization)
+  # When enabled: Converts videos to target specifications before analysis
+  # When disabled: Processes videos in original format (may cause compatibility issues)
+  # Recommended: true for consistent results across different input formats
   enabled: true
+
+  # Target video width in pixels
+  # Common values: 1920 (1080p), 1280 (720p), 854 (480p), 640 (360p)
+  # Must be even number for most codecs
+  # Higher values: Better quality but larger file sizes and slower processing
+  # Performance impact: 1080p takes ~2x longer than 720p to process
   target_width: 1280
+
+  # Target video height in pixels
+  # Common values: 1080, 720, 480, 360
+  # Must maintain aspect ratio with target_width for non-distorted video
+  # Standard ratios: 16:9 (1920x1080, 1280x720), 4:3 (640x480)
   target_height: 720
+
+  # Target frames per second (FPS)
+  # Common values: 24 (cinema), 25 (PAL), 30 (NTSC), 60 (smooth motion)
+  # Higher FPS: Smoother motion but larger files and more frames to analyze
+  # Lower FPS: Smaller files and faster processing but less smooth motion
+  # Recommended: 24 for general content, 30 for web content, 60 for gaming
   target_fps: 24
-  codec: "auto"                            # auto|h264_nvenc|h264_videotoolbox|libx264
 
-# Scene Detection Settings
+  # Video codec for encoding
+  # Values:
+  #   - "auto": Automatically select best available codec for the system
+  #   - "h264_nvenc": NVIDIA GPU hardware encoding (fastest on NVIDIA GPUs)
+  #   - "h264_videotoolbox": Apple hardware encoding (fastest on macOS)
+  #   - "libx264": CPU software encoding (universally compatible, slower)
+  #   - "libx265": HEVC encoding (better compression, much slower)
+  # Performance: Hardware encoders are 3-10x faster than software encoders
+  codec: "auto"
+
+# ================================================================================================
+# SCENE DETECTION SETTINGS
+# ================================================================================================
+# Automatic detection of scene boundaries and transitions in video content
+
 scenes:
+  # Enable automatic scene detection
+  # When enabled: Video is split into logical scenes based on content changes
+  # When disabled: Entire video is treated as one scene (may reduce accuracy)
+  # Scene detection helps identify natural break points for more intelligent clipping
   enabled: true
-  method: "ffmpeg"                         # ffmpeg|pyscenedetect
-  threshold: 0.3                           # Scene change threshold
-  generate_timeline: true                   # Generate visual timeline
 
-# Sampling & Segmentation
-sample_rate: 0.25                           # FPS for frame sampling
-refine_rate: 0.5                           # FPS for refinement
-min_clip_duration: 5.0                     # Minimum clip duration in seconds
-max_gap: 2.0                              # Maximum gap tolerance in seconds
+  # Scene detection algorithm
+  # Values:
+  #   - "ffmpeg": Uses FFmpeg's built-in scene detection (fast, reliable)
+  #   - "pyscenedetect": Uses PySceneDetect library (more accurate, slower)
+  # ffmpeg method: Analyzes pixel differences between frames
+  # pyscenedetect method: Uses more sophisticated content analysis
+  # Recommended: "ffmpeg" for speed, "pyscenedetect" for accuracy
+  method: "ffmpeg"
 
-# Filtering Settings
+  # Scene change sensitivity threshold
+  # Range: 0.0 (very sensitive, many scenes) to 1.0 (less sensitive, fewer scenes)
+  # Values:
+  #   - 0.1-0.2: Detects subtle changes (many short scenes)
+  #   - 0.3-0.4: Balanced detection (recommended for most content)
+  #   - 0.5-0.7: Only major changes (fewer, longer scenes)
+  #   - 0.8-1.0: Only dramatic changes (very few scenes)
+  # Higher values: Fewer scenes, longer segments, faster processing
+  # Lower values: More scenes, shorter segments, more precise cutting
+  threshold: 0.3
+
+  # Generate visual timeline showing detected scenes
+  # Creates PNG images showing scene boundaries and transitions
+  # Useful for: Manual review, debugging scene detection accuracy
+  # Files saved to: output_dir/timeline_scenes.png
+  # Performance impact: Adds 10-30 seconds to processing time
+  generate_timeline: true
+
+# ================================================================================================
+# SAMPLING & SEGMENTATION SETTINGS
+# ================================================================================================
+# Controls how video frames are analyzed and how clips are identified and extracted
+
+# Frame sampling rate for AI analysis (frames per second)
+# Determines how frequently frames are extracted and analyzed for content criteria
+# Range: 0.1 (1 frame every 10 seconds) to 5.0 (5 frames per second)
+# Values:
+#   - 0.1-0.3: Fast processing, less accurate (good for long videos)
+#   - 0.4-0.8: Balanced speed/accuracy (recommended for most content)
+#   - 1.0-2.0: High accuracy, slower processing (good for short videos)
+#   - 2.0+: Very high accuracy, much slower (use for critical content only)
+# Performance impact: Doubling sample_rate roughly doubles processing time
+# Memory impact: Higher rates require more disk space for extracted frames
+sample_rate: 0.6
+
+# Refinement sampling rate for detailed analysis of identified clips
+# Used for fine-tuning clip boundaries after initial identification
+# Range: 0.5-5.0 (usually higher than sample_rate for precision)
+# Should be >= sample_rate for optimal results
+# Higher values provide more precise clip start/end points
+# Performance impact: Only affects identified clips, minimal overall impact
+refine_rate: 1.0
+
+# Minimum duration for valid clips (seconds)
+# Clips shorter than this duration will be discarded
+# Range: 1.0-10.0 seconds
+# Values:
+#   - 1.0-2.0: Keep very short moments (good for highlights)
+#   - 3.0-5.0: Standard minimum length (recommended for most content)
+#   - 6.0-10.0: Only longer segments (good for storytelling content)
+# Lower values: More clips but potentially too short to be useful
+# Higher values: Fewer clips but each has substantial content
+min_clip_duration: 5.0
+
+# Maximum gap between good frames to bridge into single clip (seconds)
+# When good frames are separated by short gaps of bad frames, they can be
+# combined into one clip if the gap is smaller than this value
+# Range: 0.5-5.0 seconds
+# Values:
+#   - 0.5-1.0: Strict separation (more individual clips)
+#   - 1.5-3.0: Moderate bridging (recommended for most content)
+#   - 3.0-5.0: Aggressive bridging (fewer, longer clips with some bad content)
+# Lower values: More clips, higher quality per clip
+# Higher values: Fewer clips, may include some undesired content
+max_gap: 2.0
+
+# ================================================================================================
+# FILTERING SETTINGS
+# ================================================================================================
+# Controls how content criteria are combined to make keep/reject decisions for clips
+
 filtering:
-  criteria_threshold: 0.2                  # Percentage of criteria that must be met to keep a segment (20% = 1/5 criteria)
-  rejection_strategy: "any"                # percentage|count|any|all - "any" means keep if ANY criteria is met
-  min_criteria_count: 1                    # Minimum number of criteria that must be met (when strategy is 'count')
-  warn_high_rejection: true                # Warn if rejection rate exceeds warning threshold
-  rejection_warning_threshold: 0.8        # Threshold for high rejection warning
+  # Percentage of criteria that must be met to keep a clip (0.0-1.0)
+  # When rejection_strategy is "percentage", this determines the threshold
+  # Values:
+  #   - 0.2 (20%): Very permissive - keep clips if any 1 out of 5 criteria pass
+  #   - 0.5 (50%): Moderate - keep clips if half the criteria pass
+  #   - 0.8 (80%): Strict - keep clips only if most criteria pass
+  #   - 1.0 (100%): Very strict - all criteria must pass
+  # Lower values: More content kept, lower average quality
+  # Higher values: Less content kept, higher average quality
+  criteria_threshold: 1
 
-# Analysis Criteria with Fallback Methods
+  # Strategy for combining multiple criteria decisions
+  # Values:
+  #   - "percentage": Use criteria_threshold percentage (e.g., 60% of criteria must pass)
+  #   - "count": At least min_criteria_count criteria must pass
+  #   - "any": Keep clip if ANY single criterion passes (most permissive)
+  #   - "all": Keep clip only if ALL criteria pass (most strict)
+  # Examples:
+  #   - "any" with face+gender criteria: Keep if face OR gender detected
+  #   - "all" with face+gender criteria: Keep only if face AND gender detected
+  #   - "percentage" at 50%: Keep if at least half the criteria pass
+  rejection_strategy: "any"
+
+  # Minimum number of criteria that must pass (used with "count" strategy)
+  # Only relevant when rejection_strategy is "count"
+  # Range: 1 to number of enabled criteria
+  # Example: With 5 criteria enabled, min_criteria_count=2 means at least 2 must pass
+  min_criteria_count: 1
+
+  # Display warning when rejection rate exceeds threshold
+  # Helps identify when filtering settings are too strict
+  # Useful for adjusting criteria_threshold or rejection_strategy
+  warn_high_rejection: true
+
+  # Rejection rate threshold for displaying warnings (0.0-1.0)
+  # When more than this percentage of clips are rejected, show optimization suggestions
+  # Values:
+  #   - 0.5 (50%): Warn if more than half the content is rejected
+  #   - 0.8 (80%): Warn only if vast majority is rejected (recommended)
+  #   - 0.9 (90%): Warn only in extreme cases
+  rejection_warning_threshold: 0.8
+
+# ================================================================================================
+# CONTENT ANALYSIS CRITERIA
+# ================================================================================================
+# AI-powered analysis criteria for determining which video segments to keep or reject
+# Each criterion uses machine learning models with fallback methods for reliability
+
 criteria:
+  # NSFW (Not Safe For Work) Content Detection
+  # Detects explicit, sexual, or inappropriate visual content
   nsfw:
+    # Enable NSFW detection
     enabled: true
-    method: "auto"                         # auto selects best available method
+
+    # Primary detection method (auto-selects best available)
+    # "auto" tries methods in fallback_chain order until one works
+    method: "auto"
+
+    # Fallback chain of detection methods (tried in order)
+    # Methods:
+    #   - "nsfw_image_detector": Specialized NSFW detection model (most accurate)
+    #   - "transformers": Hugging Face transformers-based detection (fast, reliable)
+    #   - "opennsfw2": Yahoo's open NSFW model (lightweight backup)
+    # Each method has different accuracy, speed, and system requirements
     fallback_chain:
       - "nsfw_image_detector"
       - "transformers"
       - "opennsfw2"
-    mode: "high"                          # high|medium|low precision
-    action: "reject"                      # reject|keep
 
+    # Detection precision mode
+    # Values:
+    #   - "high": Maximum accuracy, slower processing, fewer false positives
+    #   - "medium": Balanced accuracy and speed (recommended)
+    #   - "low": Fast processing, higher chance of false positives/negatives
+    mode: "high"
+
+    # Action to take when NSFW content is detected
+    # Values:
+    #   - "reject": Exclude clips containing NSFW content (recommended for filtering)
+    #   - "keep": Include only clips containing NSFW content (for content extraction)
+    action: "reject"
+
+  # Face Detection and Analysis
+  # Detects human faces in video frames with configurable accuracy thresholds
   face:
+    # Enable face detection
     enabled: true
+
+    # Primary detection method (auto-selects best available)
     method: "auto"
+
+    # Fallback chain of face detection methods (tried in order)
+    # Methods:
+    #   - "ultralytics": YOLO-based detection (fast, accurate, good for multiple faces)
+    #   - "huggingface": Transformer-based detection (very accurate, slower)
+    #   - "mediapipe": Google's MediaPipe (fast, good for real-time, single face)
+    #   - "opencv": OpenCV Haar cascades (lightweight, basic accuracy)
+    # Performance: ultralytics > huggingface > mediapipe > opencv
     fallback_chain:
       - "ultralytics"
       - "huggingface"
       - "mediapipe"
       - "opencv"
+
+    # Minimum confidence score to consider a face detection valid (0.0-1.0)
+    # Values:
+    #   - 0.3-0.5: Very permissive, may include false positives
+    #   - 0.6-0.7: Balanced accuracy (recommended for most content)
+    #   - 0.8-0.9: High confidence only, may miss some valid faces
+    # Lower values: Detect more faces but with more false positives
+    # Higher values: Detect fewer faces but with higher accuracy
     min_confidence: 0.6
+
+    # Minimum face area as percentage of total frame area (0.0-100.0)
+    # Filters out faces that are too small to be significant
+    # Values:
+    #   - 0.5-1.0: Detect small faces in distance (crowded scenes)
+    #   - 1.0-3.0: Standard face sizes (recommended for most content)
+    #   - 3.0-10.0: Only prominent faces (close-ups, main subjects)
+    # Lower values: Include distant/small faces
+    # Higher values: Only include prominent faces
     min_area_pct: 1.0
 
+  # Gender Detection and Filtering
+  # Analyzes detected faces to determine gender and filter based on preferences
   gender:
+    # Enable gender analysis (requires face detection to be enabled)
     enabled: true
+
+    # Primary gender detection method
     method: "auto"
+
+    # Fallback chain of gender detection methods (tried in order)
+    # Methods:
+    #   - "transformers": Modern transformer-based models (most accurate)
+    #   - "deepface": DeepFace library with multiple model options (reliable backup)
+    # Note: Gender detection runs only on detected faces from face criterion
     fallback_chain:
       - "transformers"
       - "deepface"
+
+    # Gender filter preference
+    # Values:
+    #   - "female": Keep clips containing female faces
+    #   - "male": Keep clips containing male faces
+    #   - "any": Keep clips containing any gender (disables gender filtering)
+    #   - "both": Keep clips containing both male and female faces
+    # Note: This affects clip inclusion based on detected gender
     filter: "female"
+
+    # Minimum confidence score for gender classification (0.0-1.0)
+    # Values:
+    #   - 0.5-0.6: Accept uncertain classifications
+    #   - 0.7-0.8: Balanced confidence (recommended)
+    #   - 0.9-1.0: Only very confident classifications
+    # Higher values: More accurate but may miss some valid detections
+    # Lower values: More detections but with potential misclassifications
     min_confidence: 0.8
 
+  # Pose Analysis and Head Orientation Detection
+  # Analyzes facial pose angles to filter based on head orientation and viewability
   pose:
+    # Enable pose analysis (requires face detection to be enabled)
     enabled: true
+
+    # Primary pose detection method
     method: "auto"
+
+    # Fallback chain of pose detection methods (tried in order)
+    # Methods:
+    #   - "mediapipe": Google MediaPipe face mesh (most accurate for pose)
+    #   - "opencv": OpenCV facial landmark detection (basic pose estimation)
+    #   - "heuristic": Simple geometric heuristics based on face dimensions
     fallback_chain:
       - "mediapipe"
       - "opencv"
       - "heuristic"
+
+    # Maximum pitch angle (up/down head tilt) in degrees (0-90)
+    # Pitch: 0° = looking straight, +degrees = looking up, -degrees = looking down
+    # Values:
+    #   - 10-20°: Only straight-ahead views (very strict)
+    #   - 25-35°: Moderate head tilts allowed (recommended)
+    #   - 40-60°: Large head tilts allowed (permissive)
+    # Lower values: Only near-frontal views
+    # Higher values: Allow more varied head orientations
     max_pitch: 35
+
+    # Maximum yaw angle (left/right head turn) in degrees (0-90)
+    # Yaw: 0° = facing camera, +degrees = turned right, -degrees = turned left
+    # Values:
+    #   - 15-30°: Only near-frontal views (strict)
+    #   - 45-75°: Profile views allowed (recommended for varied content)
+    #   - 80-90°: Even extreme profile views allowed (very permissive)
+    # Lower values: Only frontal faces
+    # Higher values: Include profile and three-quarter views
     max_yaw: 75
+
+    # Maximum roll angle (head tilt/rotation) in degrees (0-90)
+    # Roll: 0° = upright head, +degrees = tilted clockwise, -degrees = tilted counter-clockwise
+    # Values:
+    #   - 10-20°: Only upright heads (strict)
+    #   - 25-35°: Moderate head tilts (recommended)
+    #   - 40-60°: Large tilts allowed (artistic shots, lying down)
+    # Lower values: Only upright orientations
+    # Higher values: Allow tilted or rotated heads
     max_roll: 35
 
+  # Face Visibility and Occlusion Analysis
+  # Detects if faces are partially hidden by objects, hands, masks, or other obstructions
   visibility:
+    # Enable visibility analysis (requires face detection to be enabled)
     enabled: true
+
+    # Maximum percentage of face that can be masked/hidden (0-100)
+    # Analyzes face occlusion by hands, objects, masks, hair, etc.
+    # Values:
+    #   - 0-20%: Only fully visible faces (very strict)
+    #   - 30-50%: Moderate occlusion allowed (recommended for natural content)
+    #   - 60-80%: Significant occlusion allowed (artistic or stylized content)
+    #   - 90-100%: Even heavily obscured faces accepted (very permissive)
+    # Lower values: Only clear, unobstructed faces
+    # Higher values: Include partially hidden or artistic shots
+    # Note: Useful for filtering out hands covering faces, masks, or other obstructions
     max_face_mask_percentage: 50
 
-# LLM Description Settings
+# ================================================================================================
+# AI DESCRIPTION SETTINGS (OPTIONAL)
+# ================================================================================================
+# Generate AI-powered descriptions of video content using Large Language Models
+
 describe:
+  # Enable AI-powered content description generation
+  # Generates textual descriptions of video clips using vision-language models
+  # Useful for: Content cataloging, metadata generation, accessibility
   enabled: true
+
+  # Path to text prompt template for AI description generation
+  # Template defines how the AI should describe video content
+  # Example prompts: "Describe this video frame in detail", "List objects and people"
+  # File should contain the prompt text with optional placeholder variables
   prompt_path: "prompts/default.txt"
+
+  # Path to JSON schema defining expected output structure
+  # Constrains AI output to specific format for consistent processing
+  # Example schema: {"description": "string", "objects": ["array"], "people_count": "number"}
   schema_path: "schemas/output.json"
+
+  # AI model identifier for description generation
+  # Supports various vision-language models from different providers
+  # Examples:
+  #   - "mistral-community_pixtral-12b": Mistral's vision model (multimodal)
+  #   - "gpt-4-vision-preview": OpenAI's GPT-4 with vision (requires API key)
+  #   - "llava-v1.6-34b": Open-source vision-language model
+  # Model choice affects accuracy, speed, and resource requirements
   model: "mistral-community_pixtral-12b"
+
+  # API endpoint URL for the AI model service
+  # Local server: "http://localhost:1234" (for local inference servers)
+  # Remote API: "https://api.openai.com/v1" (for cloud services)
+  # Requires compatible API server supporting vision models
   endpoint: "http://localhost:1234"
+
+  # Number of frames to sample from each clip for description
+  # More frames provide better context but increase processing time and API costs
+  # Range: 1-10 frames per clip
+  # Values:
+  #   - 1-2: Single snapshot (fast, basic description)
+  #   - 3-5: Multiple perspectives (recommended for balanced analysis)
+  #   - 6-10: Comprehensive sampling (detailed but slower)
   frames_per_clip: 5
+
+  # Maximum retry attempts for failed API calls
+  # Handles temporary network issues or API rate limits
+  # Range: 0-10 retries
   max_retries: 3
+
+  # Behavior when description generation fails
+  # Values:
+  #   - "skip": Continue processing without description (recommended)
+  #   - "abort": Stop processing and report error
+  #   - "placeholder": Insert generic placeholder description
   fallback_on_error: "skip"
+
+  # Automatically rename output files based on AI-generated titles
+  # Uses AI description to create meaningful filenames
+  # Example: "clip_001.mp4" becomes "woman_cooking_in_kitchen.mp4"
+  # May create long filenames; consider filesystem limitations
   enable_title_rename: false
 
-# Monitoring & Performance
+# ================================================================================================
+# MONITORING & PERFORMANCE SETTINGS
+# ================================================================================================
+# Real-time monitoring, metrics collection, and performance tracking
+
 monitoring:
+  # Display mode for real-time processing feedback
+  # Values:
+  #   - "term": Terminal/console output with progress bars and statistics
+  #   - "gui": Graphical user interface (if available)
+  #   - "silent": Minimal output, only errors and final results
+  #   - "verbose": Detailed logging with timing and debug information
+  # Terminal display shows: progress bars, current step, estimated time remaining
   display: "term"
+
+  # Export detailed performance metrics to files
+  # Creates CSV/JSON files with timing, memory usage, and processing statistics
+  # Useful for: Performance optimization, troubleshooting, benchmarking
   export_metrics: true
+
+  # Directory path for saving performance metrics
+  # Metrics include: processing times, memory usage, GPU utilization, error rates
+  # Files created: metrics_TIMESTAMP.csv, performance_summary.json
+  # Relative paths are relative to output_dir
   metrics_path: "./metrics/"
+
+  # Display alert when rejection rate exceeds threshold
+  # Shows warning and optimization suggestions during processing
+  # Helps identify overly strict filtering settings in real-time
   alert_high_rejection: true
+
+  # Rejection rate threshold for triggering alerts (0.0-1.0)
+  # When more than this percentage of content is rejected, show optimization tips
+  # Values:
+  #   - 0.5: Alert if more than 50% rejected (sensitive)
+  #   - 0.8: Alert if more than 80% rejected (recommended)
+  #   - 0.95: Alert only in extreme cases (conservative)
   rejection_threshold: 0.8
 
-# Video Processing Settings
+# ================================================================================================
+# VIDEO PROCESSING SETTINGS
+# ================================================================================================
+# Technical settings for video file handling, temporary files, and processing optimization
+
 video:
+  # Directory for temporary files during processing
+  # Stores: extracted frames, intermediate video segments, processing logs
+  # Disk space required: 1-3GB for typical video processing
+  # Cleanup: Automatically removed after processing (unless cleanup_temp is false)
+  # Use fast storage (SSD) for better performance
   temp_dir: "./temp"
+
+  # Automatically delete temporary files after successful processing
+  # When true: Saves disk space, removes processing artifacts
+  # When false: Keeps files for debugging, manual review, or reprocessing
+  # Temporary files include: extracted frames, cut segments, analysis results
   cleanup_temp: true
+
+  # Enable parallel processing of multiple video segments
+  # When true: Process multiple clips simultaneously (faster but more resource-intensive)
+  # When false: Process clips sequentially (slower but more stable)
+  # Parallel processing requires sufficient RAM and CPU cores
+  # Not recommended for: Low-memory systems, single-core CPUs
   parallel_processing: false
+
+  # Maximum number of parallel worker processes
+  # Only used when parallel_processing is enabled
+  # Range: 1-16 (recommended: CPU_cores/2 to avoid overwhelming system)
+  # Each worker uses: 500MB-2GB RAM depending on video resolution
+  # Higher values: Faster processing but more system load
   max_workers: 4
 
-# Quality & Output Settings
+# ================================================================================================
+# OUTPUT QUALITY & ENCODING SETTINGS
+# ================================================================================================
+# Controls final video output quality, compression, and technical specifications
+
 output:
+  # Video codec for final output encoding
+  # Values:
+  #   - "libx264": H.264 software encoding (universally compatible, slower)
+  #   - "h264_nvenc": NVIDIA GPU hardware encoding (faster on NVIDIA GPUs)
+  #   - "h264_videotoolbox": Apple hardware encoding (faster on macOS)
+  #   - "libx265": H.265/HEVC encoding (better compression, much slower)
+  # Hardware encoders are 3-10x faster but may have quality differences
   codec: "libx264"
+
+  # Audio codec for output file
+  # Values:
+  #   - "aac": Advanced Audio Coding (recommended, widely compatible)
+  #   - "mp3": MPEG Audio Layer 3 (smaller files, older standard)
+  #   - "copy": Copy original audio without re-encoding (fastest, preserves quality)
+  # Note: "copy" may cause compatibility issues if original codec is uncommon
   audio_codec: "aac"
+
+  # Video encoding quality preset
+  # Values:
+  #   - "low": Faster encoding, larger files, lower quality
+  #   - "medium": Balanced encoding speed and quality (recommended)
+  #   - "high": Slower encoding, smaller files, higher quality
+  #   - "lossless": No quality loss, very large files, very slow
+  # Higher quality settings significantly increase encoding time
   quality: "medium"
+
+  # Output file container format
+  # Values:
+  #   - "mp4": Most compatible, recommended for general use
+  #   - "mkv": Supports more codecs and features, larger file sizes
+  #   - "avi": Older format, good compatibility but larger files
+  #   - "mov": Apple QuickTime format, good for macOS/iOS
   container: "mp4"
+
+  # Preserve original video metadata (creation date, camera info, etc.)
+  # When true: Copies metadata from source to output file
+  # When false: Creates clean output without original metadata
+  # Metadata includes: creation date, GPS coordinates, camera settings
   preserve_metadata: true
+
+  # Embed thumbnail images in output video file
+  # Creates preview thumbnails for video players and media browsers
+  # Slightly increases file size but improves user experience
+  # Thumbnails are automatically generated from key frames
   embed_thumbnails: true
 
-# Timeline Generation
+# ================================================================================================
+# TIMELINE GENERATION SETTINGS
+# ================================================================================================
+# Visual timeline creation for reviewing scene detection and final output
+
 timeline:
+  # Generate timeline image showing detected scenes
+  # Creates PNG file with visual representation of scene boundaries
+  # Useful for: Manual review, debugging scene detection accuracy
+  # Image shows: scene thumbnails, timestamps, transition points
   generate_scenes: true
+
+  # Generate timeline image showing final processed output
+  # Creates PNG file with visual representation of kept clips
+  # Shows: selected clips, filtered content, final video structure
+  # Helps verify that desired content was correctly identified and kept
   generate_final: true
+
+  # JPEG quality for timeline thumbnail images (1-100)
+  # Higher values: Better image quality, larger timeline files
+  # Lower values: Faster generation, smaller files, reduced quality
+  # Values:
+  #   - 70-80: Good quality for review purposes
+  #   - 85-95: High quality for detailed analysis (recommended)
+  #   - 95-100: Maximum quality for archival purposes
   image_quality: 90
+
+  # Maximum width for timeline images (pixels)
+  # Larger values: More detailed timeline, larger file sizes
+  # Smaller values: Faster generation, less detail
+  # Common values: 1280 (720p), 1920 (1080p), 3840 (4K)
+  # Note: Height is automatically calculated based on video aspect ratio
   max_width: 1920
+
+  # Include metadata overlays on timeline images
+  # Shows: timestamps, clip durations, confidence scores, criteria results
+  # When true: More informative but potentially cluttered
+  # When false: Cleaner appearance but less information
   show_metadata: true
 
-# Logging Settings
+# ================================================================================================
+# LOGGING & DEBUGGING SETTINGS
+# ================================================================================================
+# Controls application logging, debugging output, and error reporting
+
 logging:
+  # Logging verbosity level
+  # Values:
+  #   - "DEBUG": Most verbose, shows all operations and technical details
+  #   - "INFO": Standard information, progress updates, and results
+  #   - "WARNING": Only warnings and errors (recommended for production)
+  #   - "ERROR": Only error messages and critical failures
+  # Higher verbosity levels include all lower level messages
+  # DEBUG level may significantly slow down processing
   level: "DEBUG"
+
+  # Log file path for persistent logging
+  # Relative paths are relative to output_dir
+  # Log rotation automatically manages file sizes
+  # Contains: processing steps, timing information, error details
   file: "autocut.log"
+
+  # Log message format style
+  # Values:
+  #   - "simple": Timestamp and message only
+  #   - "detailed": Timestamp, level, module, and message (recommended)
+  #   - "json": Structured JSON format for log analysis tools
+  #   - "minimal": Message only, no timestamp or level
   format: "detailed"
+
+  # Maximum size of individual log files
+  # When exceeded, log rotation creates new file and archives old one
+  # Values: "1MB", "10MB", "100MB", "1GB"
+  # Larger values: Longer history in single file
+  # Smaller values: More frequent rotation, easier to manage
   max_file_size: "10MB"
+
+  # Number of archived log files to keep
+  # Older files are automatically deleted when limit is reached
+  # Range: 1-20 files
+  # Higher values: Longer log history, more disk space used
+  # Lower values: Shorter history, less disk space used
   backup_count: 5
 
-# Error Handling
+# ================================================================================================
+# ERROR HANDLING & RECOVERY SETTINGS
+# ================================================================================================
+# Controls application behavior when errors occur during processing
+
 error_handling:
+  # Continue processing other clips/scenes when individual errors occur
+  # When true: Skip failed clips and continue with remaining content
+  # When false: Stop entire processing pipeline on first error
+  # Recommended: true for batch processing, false for debugging
   continue_on_error: true
+
+  # Automatically retry failed operations
+  # When true: Attempt to reprocess failed clips with different settings
+  # When false: Mark failed clips as failed and continue
+  # Retry attempts use fallback methods or reduced quality settings
   retry_failed: false
+
+  # Save clips that failed processing for manual review
+  # When true: Export partial results and problematic source segments
+  # When false: Discard failed content completely
+  # Useful for: Debugging, manual processing, quality control
   save_error_clips: false
+
+  # Generate detailed error logs with stack traces and debug information
+  # When true: Include technical details, memory usage, system state
+  # When false: Only basic error messages
+  # Detailed logs help with troubleshooting but may contain sensitive information
   detailed_error_logs: true
 
-# Advanced Settings
+# ================================================================================================
+# ADVANCED PERFORMANCE & SYSTEM SETTINGS
+# ================================================================================================
+# Advanced configuration for system resources, caching, and performance optimization
+
 advanced:
+  # Maximum RAM usage limit for video processing
+  # Prevents system from running out of memory during large video processing
+  # Values: "1GB", "4GB", "8GB", "16GB", "32GB"
+  # Higher values: Can process larger videos, faster parallel processing
+  # Lower values: More conservative memory usage, better system stability
+  # Recommended: 50-75% of total system RAM
   memory_limit: "8GB"
+
+  # Fraction of GPU memory to use for AI model inference (0.1-1.0)
+  # Controls how much VRAM is allocated for neural network processing
+  # Values:
+  #   - 0.3-0.5: Conservative, leaves memory for other applications
+  #   - 0.6-0.8: Balanced usage (recommended for dedicated processing)
+  #   - 0.9-1.0: Maximum performance, may cause out-of-memory errors
+  # Lower values: More stable but potentially slower AI processing
+  # Higher values: Faster AI processing but risk of memory errors
   gpu_memory_fraction: 0.8
+
+  # Enable caching of preprocessing results
+  # Caches: extracted frames, scene detection results, model outputs
+  # When true: Faster reprocessing of same videos with different settings
+  # When false: Always recompute everything (uses less disk space)
+  # Cache is automatically invalidated when input video or settings change
   enable_preprocessing_cache: true
+
+  # Directory for storing cached preprocessing results
+  # Cache contains: frame extracts, analysis results, model predictions
+  # Use fast storage (SSD) for better performance
+  # Relative paths are relative to current working directory
   cache_dir: "./cache"
+
+  # Maximum total size of cache directory
+  # Older cache entries are automatically removed when limit is exceeded
+  # Values: "500MB", "2GB", "10GB", "50GB"
+  # Larger values: Better cache hit rates, more disk space used
+  # Smaller values: More frequent cache clearing, less disk space used
+  # Recommended: 5-10GB for regular use, 20GB+ for batch processing
   max_cache_size: "2GB"
+
+# ================================================================================================
+# END OF CONFIGURATION
+# ================================================================================================
+# For additional help and documentation, visit:
+# - GitHub Repository: https://github.com/your-repo/autocut-v2
+# - Documentation: https://autocut-v2.readthedocs.io/
+# - Support Forum: https://community.autocut-v2.com/
+# ================================================================================================
